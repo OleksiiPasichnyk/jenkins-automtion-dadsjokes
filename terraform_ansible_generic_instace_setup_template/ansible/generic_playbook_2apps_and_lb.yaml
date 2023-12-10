@@ -1,0 +1,134 @@
+---
+- hosts: all
+  become: true
+  vars:
+    node_version: "16.x"
+    apps:
+      - name: "battleships"
+        directory: "/opt/battleships_app"
+        entry_point: "server.js"
+        domain: "battleships.paxel.ca"
+        port: 3000 # Assuming your app runs on port 3000
+      - name: "dadjokes"
+        directory: "/opt/dadjokes_app"
+        entry_point: "server.js"
+        domain: "dadjokes.paxel.ca"
+        port: 3001 # Assuming your app runs on port 3001
+
+  tasks:
+    - name: Ensure the 'ubuntu' user is present and has sudo privileges
+      ansible.builtin.user:
+        name: ubuntu
+        groups: sudo
+        append: yes
+        create_home: yes
+
+    - name: Ensure the 'ubuntu' user can sudo without a password
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers
+        state: present
+        regexp: '^%sudo'
+        line: '%sudo ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600 # Cache valid for 1 hour
+
+    - name: Install NodeSource Node.js v{{ node_version }} repo
+      ansible.builtin.shell: |
+        curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | sudo -E bash -
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: latest
+
+    - name: Install PM2 using npm command
+      ansible.builtin.shell: |
+        sudo npm install -g pm2
+      become: true
+      become_user: ubuntu
+      notify: 
+        - "save pm2 state"
+
+    - name: Set PM2 to start on boot
+      ansible.builtin.shell: pm2 startup systemd -u ubuntu --hp /home/ubuntu
+      when: ansible_service_mgr == "systemd"
+
+    - name: Install NGINX
+      ansible.builtin.apt:
+        name: nginx
+        state: latest   
+
+    - name: Create NGINX configuration for applications
+      ansible.builtin.template:
+        src: "nginx_templates/nginx_app.conf.j2"
+        dest: "/etc/nginx/sites-available/{{ item.domain }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ apps }}"
+      notify: 
+        - restart nginx
+    - name: Enable NGINX configuration by creating symbolic links
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ item.domain }}"
+        dest: "/etc/nginx/sites-enabled/{{ item.domain }}"
+        state: link
+      loop: "{{ apps }}"
+      notify: 
+        - restart nginx
+
+    - name: Remove default NGINX configuration
+      ansible.builtin.file:
+        path: "/etc/nginx/sites-enabled/default"
+        state: absent
+      notify: 
+        - restart nginx
+
+    - name: Deploy applications
+      become: true
+      become_user: root
+      block:
+        - name: Copy application code to the remote server
+          become: true
+          ansible.builtin.copy:
+            src: "../../{{ item.name }}"
+            dest: "{{ item.directory }}"
+            owner: ubuntu
+            group: ubuntu
+            mode: '0755'
+          loop: "{{ apps }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        - name: Install Node.js application dependencies
+          become: true
+          become_user: root
+          ansible.builtin.command:
+            chdir: "{{ item.directory }}/{{ item.name }}"
+            cmd: npm install
+          loop: "{{ apps }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        - name: Start or restart the application using PM2
+          become: true
+          become_user: ubuntu
+          ansible.builtin.command:
+            cmd: pm2 start {{ item.entry_point }} --name "{{ item.name }}" -f
+            chdir: "{{ item.directory }}/{{ item.name }}"
+          loop: "{{ apps }}"
+          loop_control:
+            label: "{{ item.name }}"
+  handlers:
+    - name: "save pm2 state"
+      ansible.builtin.shell: pm2 save
+      become: true
+      become_user: root
+    - name: restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

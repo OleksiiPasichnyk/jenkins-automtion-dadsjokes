@@ -1,0 +1,54 @@
+---
+- hosts: all
+  become: yes
+  vars:
+    node_version: "16.x"
+    app_directory_on_remote: "/opt/battleships_app"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600 # Cache valid for 1 hour
+
+    - name: Install NodeSource Node.js v{{ node_version }} repo
+      ansible.builtin.shell: |
+        curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | sudo -E bash -
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: latest
+
+    - name: Install PM2 with NPM
+      ansible.builtin.npm:
+        name: pm2
+        global: yes
+      notify: 
+        - "save pm2 state"
+
+    - name: Set PM2 to start on boot
+      ansible.builtin.shell: pm2 startup systemd -u ubuntu --hp /home/ubuntu
+      when: ansible_service_mgr == "systemd"
+
+    - name: Copy application code to the remote server
+      ansible.builtin.copy:
+        src: "../../battleships"
+        dest: "{{ app_directory_on_remote }}"
+        owner: ubuntu # Replace with the appropriate user
+        group: ubuntu # Replace with the appropriate group
+        mode: '0755'
+
+    - name: Install Node.js application dependencies
+      ansible.builtin.shell: |
+        cd {{ app_directory_on_remote }}/battleships
+        npm install
+
+    - name: Start Node.js application with PM2
+      ansible.builtin.shell: |
+        cd {{ app_directory_on_remote }}/battleships
+        pm2 start server.js --name battleships_app -f
+
+  handlers:
+    - name: "save pm2 state"
+      ansible.builtin.shell: pm2 save
