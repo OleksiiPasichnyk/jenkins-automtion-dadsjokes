@@ -16,7 +16,7 @@ pipeline {
     }
 
     environment {
-        GIT_REPO = 'https://github.com/jenkins-automtion-dadsjokes.git'
+        GIT_REPO = 'https://github.com/OleksiiPasichnyk/jenkins-automtion-dadsjokes.git'
         GIT_CREDENTIALS = 'git_access_PAT'
         ANSIBLE_DIRECTORY = 'terraform_ansible_generic_instace_setup_template/ansible'
         TF_DIRECTORY = 'terraform_ansible_generic_instace_setup_template'
@@ -108,7 +108,7 @@ pipeline {
                             }
                                                 
                         sh '''
-                        ansible-playbook -i ./instance_ip.txt ./generic_playbook_2apps_and_lb.yaml -u ubuntu --private-key=$SSH_KEY -e 'ansible_ssh_common_args="-o StrictHostKeyChecking=no"'
+                        ansible-playbook -i instance_ip.txt generic_playbook_2apps_and_lb.yaml -u ubuntu --private-key=$SSH_KEY -e 'ansible_ssh_common_args="-o StrictHostKeyChecking=no"'
                         '''
                         }
                     }

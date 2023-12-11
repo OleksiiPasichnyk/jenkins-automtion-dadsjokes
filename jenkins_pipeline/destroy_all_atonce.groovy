@@ -18,9 +18,9 @@ pipeline {
             steps {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: 'op/setting_up_instance_and_node_js_app']],
+                    branches: [[name: 'main']],
                     userRemoteConfigs: [[
-                        url: 'https://github.com/LocalCoding/DevOps_jenkins_tf_ans_node_js_setup.git',
+                        url: 'https://github.com/OleksiiPasichnyk/jenkins-automtion-dadsjokes.git',
                         credentialsId: 'git_access_PAT'
                     ]]
                 ])

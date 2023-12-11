@@ -47,7 +47,7 @@
     - name: Start Node.js application with PM2
       ansible.builtin.shell: |
         cd {{ app_directory_on_remote }}/dadjokes
-        pm2 start server.js --name dadjoekes_app -f
+        pm2 start server.js --name dadjokes_app -f
 
   handlers:
     - name: "save pm2 state"
